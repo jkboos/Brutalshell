@@ -171,6 +171,10 @@ signed main( int argc, char **argv ){
 			continue;
 		}
 
+		if ( ( *( fds + 1 ) ).revents & POLLHUP ) {
+			break;
+		}
+
 		if ( ( *( fds + 1 ) ).revents & POLLIN ){
 			rlen = read( ( *( fds + 1 ) ).fd, buf, BUFLEN );
 			if ( rlen <= 0 ) break;
