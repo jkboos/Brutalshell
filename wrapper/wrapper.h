@@ -19,7 +19,8 @@ struct config {
 };
 
 int connect_daemon( struct config );
-int send_daemon( int method, int fd, char *restrict, ssize_t );
+char *restrict get_session ( int ) __attribute__((malloc));
+int send_daemon( int method, char *restrict session, int fd, char *restrict, ssize_t );
 
 int read_pty( void );
 int set_pty( void ); /* raw pty */
@@ -27,7 +28,7 @@ void reset_pty( void );
 
 void usage( const char *restrict );
 
-struct config get_configure( int, char ** );
+struct config get_configure( int, char **restrict );
 
 enum LOGLEVVELS {
 	log_error,
