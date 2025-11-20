@@ -18,6 +18,9 @@ int send_daemon ( int method, char *restrict session, int fd, char *restrict con
 
 	switch ( method ){
 		case 0:
+			if ( !session || fd < 0 ){
+				return ret;
+			}
 			slen = strlen( session ) + strlen( sep ) + len;
 			buf = malloc( slen );
 			strncpy(
