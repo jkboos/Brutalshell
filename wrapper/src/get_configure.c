@@ -1,6 +1,9 @@
 
 #include "wrapper.h"
 
+#include "yaml.h"
+
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -17,6 +20,8 @@
 #define BSH_CONFIGPATH "/etc/brutalshell/config.conf"
 #endif
 
+struct config _get_yaml( void *, struct config );
+
 struct config get_configure( int argc, char **restrict argv ){
 
 	static const char *arg_default[] = { "/bin/sh", NULL };
@@ -24,10 +29,9 @@ struct config get_configure( int argc, char **restrict argv ){
 	register struct config cfg = {};
 
 	register int fd;
+	register void *file;
 
 	register char *restrict cfg_path = BSH_CONFIGPATH;
-	register char *buf;
-	register ssize_t rlen;
 
 	register char *restrict cfg_home;
 
@@ -74,17 +78,89 @@ struct config get_configure( int argc, char **restrict argv ){
 			}
 		}
 
-		buf = malloc( BUFLEN );
+		file = fdopen( fd, "r" );
 
-		while ( ( rlen = read( fd, buf, BUFLEN ) ) > 0 ){
-			/* parse configs */
-		}
+		cfg = _get_yaml( file, cfg );
 
-		free( buf );
+		fclose( file );
 
-		close( fd );
 	}
 
 	return cfg;
 
+}
+
+struct config _get_yaml( void *f, struct config cfg ){
+
+	register int is_val;
+	register void *k, *v;
+
+	register int done;
+
+	yaml_parser_t par;
+	yaml_event_t eve;
+
+	if ( !yaml_parser_initialize( &par ) ){
+		goto RET;
+	}
+
+	yaml_parser_set_input_file( &par, f );
+
+	done = 0;
+	k = NULL;
+	v = NULL;
+
+	while ( !done ){
+		if ( !yaml_parser_parse( &par, &eve ) ){
+			break;
+		}
+
+		switch ( eve.type ){
+			case YAML_SCALAR_EVENT:
+				v = eve.data.scalar.value;
+
+				if ( !is_val ){
+
+					if ( k ){
+						free( k );
+					}
+
+					k = v;
+					is_val = 1;
+
+				} else {
+
+					if ( !strcmp( k, "method" ) ){
+						cfg.daemon_method = atoi( v );
+					} else if ( !strcmp( k, "path" ) ){
+						cfg.desc = strdup( v );
+						cfg.len = strlen( v );
+					}
+				}
+
+				break;
+			case YAML_SEQUENCE_START_EVENT:
+			case YAML_MAPPING_START_EVENT:
+				break;
+
+			case YAML_STREAM_END_EVENT:
+				done = 1;
+				break;
+
+			default:
+				break;
+		}
+
+		yaml_event_delete( &eve );
+	}
+
+	if ( k ){
+		free( k );
+	}
+
+	yaml_parser_delete( &par );
+
+RET:
+
+	return cfg;
 }
