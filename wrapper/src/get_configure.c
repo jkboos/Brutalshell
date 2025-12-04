@@ -28,9 +28,13 @@ struct config _get_yaml( void *, struct config );
 
 struct config get_configure( int argc, char **restrict argv ){
 
-	static const char *arg_default[] = { "/bin/sh", NULL };
-
-	register struct config cfg = {};
+	register struct config cfg = {
+		.logfd = 0,
+		.argv = NULL,
+		.daemon_method = 0,
+		.desc = NULL,
+		.len = 0,
+	};
 
 	register int fd;
 	register void *file;
@@ -41,58 +45,62 @@ struct config get_configure( int argc, char **restrict argv ){
 
 	cfg.logfd = logfd = STDERR_FILENO;
 
-	if ( argc < 2 ){
-		cfg.argv = (void *)arg_default;
-		memset( cfg.argv, 0, sizeof( *cfg.argv ) * 2 );
-		*cfg.argv = "/bin/sh";
-	} else {
+	cfg.argv = NULL;
 
-		if ( !strcmp( "c", *( argv + 1 ) ) && argc > 2 ){
-			cfg_path = *( argv + 2 );
-			cfg.argv = argv + 3;
-		} else if ( !strcmp( "?", *( argv + 1 ) ) ){
-			usage( *argv );
-			return cfg;
-		}else{
+	if ( argc > 2 && !strcmp( "c", *( argv + 1 ) ) ){
+		cfg_path = *( argv + 2 );
+		cfg.argv = argv + 3;
+	} else if ( argc > 1 && !strcmp( "?", *( argv + 1 ) ) ){
+		usage( *argv );
+		return cfg;
+	}else{
+		if ( argc > 1 ){
 			cfg.argv = argv + 1;
 		}
+	}
 
-		fd = open( cfg_path, O_RDONLY );
-		if ( fd < 0 ){
+	fd = open( cfg_path, O_RDONLY );
+	if ( fd < 0 ){
 
-			if ( ( fd = open( getenv( "BSH_CFG" ), O_RDONLY ) ) < 0 ){
+		if ( ( fd = open( getenv( "BSH_CFG" ), O_RDONLY ) ) < 0 ){
 
-				cfg.desc = getenv( "HOME" );
-				if ( !cfg.desc ){
-					return cfg;
-				}
-				cfg_home = malloc( PATH_MAX );
-				memset( cfg_home, 0, PATH_MAX );
-				cfg.desc = strcpy( cfg_home, cfg.desc );
-				strncpy( cfg.desc, "/.config/bsh/config.conf", PATH_MAX - strlen( cfg_home ) - 1 );
-
-				cfg.desc = NULL;
-
-				fd = open( cfg_home, O_RDONLY );
-				free( cfg_home );
-				if ( fd < 0 ){
-					return cfg;
-				}
-
+			cfg.desc = getenv( "HOME" );
+			if ( !cfg.desc ){
+				goto RET;
 			}
+			cfg_home = malloc( PATH_MAX );
+			memset( cfg_home, 0, PATH_MAX );
+			cfg.desc = strcpy( cfg_home, cfg.desc );
+			strncpy( cfg.desc, "/.config/bsh/config.conf", PATH_MAX - strlen( cfg_home ) - 1 );
+
+			cfg.desc = NULL;
+
+			fd = open( cfg_home, O_RDONLY );
+			free( cfg_home );
+			if ( fd < 0 ){
+				goto RET;
+			}
+
 		}
+	}
 
-		file = fdopen( fd, "r" );
+	file = fdopen( fd, "r" );
 
-		cfg = _get_yaml( file, cfg );
+	cfg = _get_yaml( file, cfg );
 
-		fclose( file );
+	fclose( file );
 
-		if ( !cfg.desc ){
-			cfg.daemon_method = 0;
-			cfg.desc = strdup( BSH_DEFAULT_DAEMON_PATH );
-		}
+RET:
 
+	if ( !cfg.desc ){
+		cfg.daemon_method = 0;
+		cfg.desc = strdup( BSH_DEFAULT_DAEMON_PATH );
+	}
+
+	if ( !cfg.argv ){
+		cfg.argv = malloc( sizeof( *cfg.argv ) << 1 );
+		*( cfg.argv + 0 ) = strdup( "/bin/sh" );
+		*( cfg.argv + 1 ) = NULL;
 	}
 
 	return cfg;
@@ -102,9 +110,21 @@ struct config get_configure( int argc, char **restrict argv ){
 struct config _get_yaml( void *f, struct config cfg ){
 
 	register int is_val;
+	register int is_seq;
+	register int is_arg;
 	register void *k, *v;
 
+	register size_t seq_len;
+
 	register int done;
+
+	typedef struct _n {
+		struct _n *next;
+		void *val;
+	} node;
+
+	register node *arg_root;
+	register node *tmp;
 
 	yaml_parser_t par;
 	yaml_event_t eve;
@@ -119,6 +139,12 @@ struct config _get_yaml( void *f, struct config cfg ){
 	k = NULL;
 	v = NULL;
 
+	is_val = 0;
+	is_seq = 0;
+	is_arg = 0;
+	seq_len = 0;
+	arg_root = NULL;
+
 	while ( !done ){
 		if ( !yaml_parser_parse( &par, &eve ) ){
 			break;
@@ -128,28 +154,76 @@ struct config _get_yaml( void *f, struct config cfg ){
 			case YAML_SCALAR_EVENT:
 				v = eve.data.scalar.value;
 
-				if ( !is_val ){
 
-					if ( k ){
-						free( k );
-					}
+				if ( !is_val ){
 
 					k = v;
 					is_val = 1;
 
-				} else {
+					is_arg = k && !strcmp( k, "shell" );
 
-					if ( k && !strcmp( k, "method" ) ){
-						cfg.daemon_method = atoi( v );
-					} else if ( k && !strcmp( k, "path" ) ){
-						cfg.desc = strdup( v );
-						cfg.len = strlen( v );
+#					ifdef DBG
+					fprintf( stderr, "KEY: %s\n", v );
+#					endif
+
+				} else {
+#					ifdef DBG
+					fprintf( stderr, "VAL: %s\n", v );
+#					endif
+
+					if ( is_val && is_seq ){
+						if ( is_arg ){
+
+							/* PUSH */
+							tmp = malloc( sizeof( *tmp ) );
+							tmp -> next = arg_root;
+							tmp -> val = strdup( v );
+							arg_root = tmp;
+
+							seq_len++;
+						}
+					} else {
+						if ( k && !strcmp( k, "method" ) ){
+							cfg.daemon_method = atoi( v );
+						} else if ( k && !strcmp( k, "path" ) ){
+							cfg.desc = strdup( v );
+							cfg.len = strlen( v );
+						}
 					}
 				}
 
 				break;
 			case YAML_SEQUENCE_START_EVENT:
+			case YAML_SEQUENCE_END_EVENT:
+				break;
 			case YAML_MAPPING_START_EVENT:
+				is_seq = 1;
+				seq_len = 0;
+				is_val = 0;
+#				ifdef DBG
+				fprintf( stderr, "MAP START\n" );
+#				endif
+				break;
+			case YAML_MAPPING_END_EVENT:
+#				ifdef DBG
+				fprintf( stderr, "MAP END\n" );
+#				endif
+				if ( is_seq ){
+					if ( is_arg ){
+						cfg.argv = malloc( sizeof( *cfg.argv ) * ( seq_len + 1 ) );
+						memset( cfg.argv, 0, sizeof( *cfg.argv ) * ( seq_len + 1 ) );
+						is_arg = 0;
+						while ( arg_root ){
+							--seq_len;
+							*( cfg.argv + seq_len ) = arg_root -> val;
+							/* POP */
+							tmp = arg_root;
+							arg_root = arg_root -> next;
+							free( tmp );
+						}
+					}
+				}
+				is_seq = 0;
 				break;
 
 			case YAML_STREAM_END_EVENT:
@@ -161,10 +235,6 @@ struct config _get_yaml( void *f, struct config cfg ){
 		}
 
 		yaml_event_delete( &eve );
-	}
-
-	if ( k ){
-		free( k );
 	}
 
 	yaml_parser_delete( &par );
