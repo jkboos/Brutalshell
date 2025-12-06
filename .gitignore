@@ -11,3 +11,7 @@ wheels/
 
 # macOS files
 .DS_Store
+
+# editor/IDE files
+.vscode/
+.idea/
