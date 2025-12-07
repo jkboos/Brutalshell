@@ -12,6 +12,10 @@ struct helper_config {
   int argc;                  /* argument count */
 };
 
+struct daemon_response {
+  // to be implemented
+};
+
 enum LOG_LEVELS {
   LOG_ERROR = 0,
   LOG_WARNING = 1,
