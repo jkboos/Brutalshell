@@ -48,5 +48,5 @@ def completions(prompt: str, host: str):
         suffix = re.findall(r'\[\[(.*?)\]\]', resp.json()['choices'][0]['message']["content"])[-1]
         return suffix
         # return resp.json()['choices'][0]['message']["content"]
-    except Exception:
+    except Exception as e:
         print(f"Something went wrong! {e}")
