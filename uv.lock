@@ -25,12 +25,19 @@ dependencies = [
     { name = "pytest" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pyte", specifier = ">=0.8.2" },
     { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "certifi"
