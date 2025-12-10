@@ -36,7 +36,7 @@ int test_get_configure(void) {
         return 1; /* skip if mkstemp unavailable */
     }
 
-    const char *yaml =
+    static const char *restrict const yaml =
         "method: 1\n"
         "path: /tmp/demo.sock\n"
         "shell:\n"
