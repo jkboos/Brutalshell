@@ -39,7 +39,7 @@ def completions(prompt: str, host: str):
     url = host.rstrip("/") + "/" + path.lstrip("/")
 
     try:
-        resp = requests.post(url, json=body, headers={"Content-Type": "application/json"}, timeout=120.0, verify=False)
+        resp = requests.post(url, json=body, headers={"Content-Type": "application/json"}, timeout=10.0, verify=False)
         suffix = re.findall(r'\[\[(.*?)\]\]', resp.json()['choices'][0]['message']["content"])[-1]
         return suffix
     except requests.RequestException as e:
